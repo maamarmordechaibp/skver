@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useAuth } from '../lib/useAuth';
 
 interface Campaign {
   id: string;
@@ -44,6 +45,7 @@ const getNextSaturday = () => {
 };
 
 export default function CampaignsPage() {
+  const { loading: authLoading, signOut } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -346,6 +348,10 @@ export default function CampaignsPage() {
   const callingNow = queue.filter(q => q.status === 'calling' || q.is_calling);
   const completedQueue = queue.filter(q => ['completed', 'no_answer', 'failed'].includes(q.status));
 
+  if (authLoading) {
+    return <div style={{ minHeight: '100vh', background: '#1e1e2e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#94a3b8', fontSize: '18px' }}>Loading...</div></div>;
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%)' }}>
       <nav style={{ background: '#4F46E5', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -359,6 +365,7 @@ export default function CampaignsPage() {
               background: item === 'Campaigns' ? 'rgba(255,255,255,0.2)' : 'transparent'
             }}>{item}</Link>
           ))}
+          <button onClick={signOut} style={{ color: 'white', padding: '8px 16px', borderRadius: '8px', background: 'rgba(239,68,68,0.3)', border: '1px solid rgba(239,68,68,0.5)', fontSize: '14px', fontWeight: '500', cursor: 'pointer' }}>Logout</button>
         </div>
       </nav>
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Head from "next/head";
+import { useAuth } from '../lib/useAuth';
 
 interface Host {
   id: string;
@@ -22,6 +23,7 @@ interface Host {
 }
 
 export default function HostsPage() {
+  const { loading: authLoading, signOut } = useAuth();
   const [hosts, setHosts] = useState<Host[]>([]);
   const [filteredHosts, setFilteredHosts] = useState<Host[]>([]);
   const [loading, setLoading] = useState(true);
@@ -183,6 +185,10 @@ export default function HostsPage() {
     td: { padding: '16px', borderBottom: '1px solid #1e293b', color: 'white', fontSize: '14px' },
   };
 
+  if (authLoading) {
+    return <div style={{ minHeight: '100vh', background: '#1e1e2e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#94a3b8', fontSize: '18px' }}>Loading...</div></div>;
+  }
+
   return (
     <>
       <Head><title>Hosts - Guest House IVR</title></Head>
@@ -194,6 +200,7 @@ export default function HostsPage() {
               {[{ href: '/dashboard', label: '📊 Dashboard' }, { href: '/hosts', label: '👥 Hosts' }, { href: '/campaigns', label: '📢 Campaigns' }, { href: '/recordings', label: '🎙️ Recordings' }].map(i => (
                 <Link key={i.href} href={i.href} style={styles.navLink(i.href === '/hosts')}>{i.label}</Link>
               ))}
+              <button onClick={signOut} style={{ color: 'white', padding: '8px 16px', borderRadius: '8px', background: 'rgba(239,68,68,0.3)', border: '1px solid rgba(239,68,68,0.5)', fontSize: '14px', fontWeight: '500', cursor: 'pointer' }}>Logout</button>
             </div>
           </div>
         </nav>

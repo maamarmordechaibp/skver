@@ -1,7 +1,14 @@
 import Link from "next/link";
 import Head from "next/head";
+import { useAuth } from '../lib/useAuth';
 
 export default function Home() {
+  const { loading, signOut } = useAuth();
+
+  if (loading) {
+    return <div style={{ minHeight: '100vh', background: '#1e1e2e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ color: '#94a3b8', fontSize: '18px' }}>Loading...</div></div>;
+  }
+
   return (
     <>
       <Head>
@@ -21,6 +28,7 @@ export default function Home() {
               <Link href="/hosts" style={{ color: 'white', textDecoration: 'none', padding: '8px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', fontSize: '14px', fontWeight: '500' }}>👥 Hosts</Link>
               <Link href="/campaigns" style={{ color: 'white', textDecoration: 'none', padding: '8px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', fontSize: '14px', fontWeight: '500' }}>📢 Campaigns</Link>
               <Link href="/recordings" style={{ color: 'white', textDecoration: 'none', padding: '8px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', fontSize: '14px', fontWeight: '500' }}>🎙️ Recordings</Link>
+              <button onClick={signOut} style={{ color: 'white', padding: '8px 16px', borderRadius: '8px', background: 'rgba(239,68,68,0.3)', border: '1px solid rgba(239,68,68,0.5)', fontSize: '14px', fontWeight: '500', cursor: 'pointer' }}>Logout</button>
             </div>
           </div>
         </nav>
