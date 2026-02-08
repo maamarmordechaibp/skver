@@ -5,6 +5,8 @@ import { getOrCreateHost } from '@/lib/supabase-server';
 /**
  * Saves the beds entered by a new host and asks for location type
  */
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;

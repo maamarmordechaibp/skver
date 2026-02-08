@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LaMLResponses } from '@/lib/laml-builder';
 
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

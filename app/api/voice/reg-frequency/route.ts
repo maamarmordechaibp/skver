@@ -4,6 +4,8 @@ import { LaMLResponses } from '@/lib/laml-builder';
 /**
  * Handles location type selection and asks for call frequency
  */
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

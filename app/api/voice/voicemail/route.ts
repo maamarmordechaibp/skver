@@ -4,6 +4,8 @@ import { LaMLResponses } from '@/lib/laml-builder';
 /**
  * Voicemail recording prompt
  */
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;

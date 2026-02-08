@@ -4,6 +4,8 @@ import { LaMLResponses } from '@/lib/laml-builder';
 /**
  * Saves the beds needed for the campaign
  */
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

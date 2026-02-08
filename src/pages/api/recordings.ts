@@ -1,29 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import formidable from 'formidable';
-import fs from 'fs';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+export const config = { runtime: 'edge' };
 
-export const config = {
-  api: {
-    bodyParser: false, // Disable body parsing for file uploads
-  },
-};
-
-// Helper to parse form data
-const parseForm = (req: NextApiRequest): Promise<{ fields: formidable.Fields; files: formidable.Files }> => {
-  return new Promise((resolve, reject) => {
-    const form = formidable({ maxFileSize: 10 * 1024 * 1024 }); // 10MB
-    form.parse(req, (err, fields, files) => {
-      if (err) reject(err);
-      else resolve({ fields, files });
-    });
-  });
-};
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
@@ -35,33 +17,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .order('category', { ascending: true });
 
       if (error) throw error;
-      return res.status(200).json(data || []);
+      return new Response(JSON.stringify(data || []), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     // POST - create new recording with file upload
     if (req.method === 'POST') {
       try {
-        const { fields, files } = await parseForm(req);
-        
-        const name = Array.isArray(fields.name) ? fields.name[0] : fields.name;
-        const description = Array.isArray(fields.description) ? fields.description[0] : fields.description;
-        const category = Array.isArray(fields.category) ? fields.category[0] : fields.category;
-        const mp3UrlField = Array.isArray(fields.mp3_url) ? fields.mp3_url[0] : fields.mp3_url;
-        
+        const formData = await req.formData();
+
+        const name = formData.get('name') as string | null;
+        const description = formData.get('description') as string | null;
+        const category = formData.get('category') as string | null;
+        const mp3UrlField = formData.get('mp3_url') as string | null;
+
         let mp3_url = mp3UrlField || '';
-        
+
         // Handle file upload if present
-        const file = files.file;
-        if (file) {
-          const uploadedFile = Array.isArray(file) ? file[0] : file;
-          const fileBuffer = fs.readFileSync(uploadedFile.filepath);
-          const fileName = `${Date.now()}-${uploadedFile.originalFilename || 'recording.mp3'}`;
-          
+        const file = formData.get('file') as File | null;
+        if (file && file.size > 0) {
+          const buffer = await file.arrayBuffer();
+          const fileBytes = new Uint8Array(buffer);
+          const fileName = `${Date.now()}-${file.name || 'recording.mp3'}`;
+
           // Upload to Supabase Storage
           const { data: uploadData, error: uploadError } = await supabase.storage
             .from('recordings')
-            .upload(fileName, fileBuffer, {
-              contentType: uploadedFile.mimetype || 'audio/mpeg',
+            .upload(fileName, fileBytes, {
+              contentType: file.type || 'audio/mpeg',
               upsert: true
             });
 
@@ -74,11 +59,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             const { data: urlData } = supabase.storage.from('recordings').getPublicUrl(fileName);
             mp3_url = urlData.publicUrl;
           }
-          
-          // Clean up temp file
-          fs.unlinkSync(uploadedFile.filepath);
         }
-        
+
         const { data, error } = await supabase
           .from('recordings')
           .insert({
@@ -95,23 +77,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (error) {
           console.error('DB insert error:', error);
           // Return demo success for testing
-          return res.status(200).json({ 
-            id: Date.now().toString(), 
+          return new Response(JSON.stringify({
+            id: Date.now().toString(),
             name, description, category, mp3_url,
-            is_active: true, 
-            created_at: new Date().toISOString() 
+            is_active: true,
+            created_at: new Date().toISOString()
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
           });
         }
-        return res.status(200).json(data);
+        return new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       } catch (parseErr) {
         console.error('Form parse error:', parseErr);
-        return res.status(400).json({ error: 'Invalid form data' });
+        return new Response(JSON.stringify({ error: 'Invalid form data' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
     }
 
     // PUT - update recording
     if (req.method === 'PUT') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const body = await req.json();
       const { id, ...updates } = body;
 
       const { data, error } = await supabase
@@ -122,14 +113,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
 
       if (error) {
-        return res.status(200).json({ id, ...updates, success: true });
+        return new Response(JSON.stringify({ id, ...updates, success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
-      return res.status(200).json(data);
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     // DELETE - delete recording
     if (req.method === 'DELETE') {
-      const { id } = req.query;
+      const id = req.nextUrl.searchParams.get('id');
 
       const { error } = await supabase
         .from('recordings')
@@ -137,14 +134,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .eq('id', id);
 
       if (error) {
-        return res.status(200).json({ success: true }); // Demo mode
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }); // Demo mode
       }
-      return res.status(200).json({ success: true });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    res.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error: any) {
     console.error('API Error:', error);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+    return new Response(JSON.stringify({ error: error.message || 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

@@ -6,6 +6,8 @@ import { saveResponse, updateQueueStatus } from '@/lib/supabase-server';
  * Handles host responses to outbound campaign calls
  * Options: 1=accept, 2=change beds, 3=decline
  */
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;

@@ -1,14 +1,14 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+export const config = { runtime: 'edge' };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    // Fetch all dashboard data in parallel
     const [campaignsRes, hostsRes, callHistoryRes, responsesRes, queueRes] = await Promise.all([
       supabase.from('campaigns').select('*').eq('status', 'active').limit(1),
       supabase.from('hosts').select('*').gt('total_beds', 0).order('total_beds', { ascending: false }).limit(20),
@@ -25,7 +25,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const responses = responsesRes.data || [];
     const queue = queueRes.data || [];
 
-    // Calculate stats
     const stats = {
       totalBeds: hosts.reduce((sum: number, h: any) => sum + (h.total_beds || 0), 0),
       totalHosts: hosts.length,
@@ -35,15 +34,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       pending: queue.filter((q: any) => q.status === 'pending').length,
     };
 
-    res.status(200).json({
-      campaign,
-      hosts,
-      calls,
-      responses,
-      stats,
+    return new Response(JSON.stringify({ campaign, hosts, calls, responses, stats }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
     console.error('Dashboard API Error:', error);
-    res.status(500).json({ error: error.message || 'Failed to load dashboard data' });
+    return new Response(JSON.stringify({ error: error.message || 'Failed to load dashboard data' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

@@ -4,6 +4,8 @@ import { LaMLResponses } from '@/lib/laml-builder';
 /**
  * Admin PIN entry prompt
  */
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     // Ask for PIN

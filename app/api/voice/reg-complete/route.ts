@@ -5,6 +5,8 @@ import { getOrCreateHost, updateHostRegistration } from '@/lib/supabase-server';
 /**
  * Completes host registration
  */
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;

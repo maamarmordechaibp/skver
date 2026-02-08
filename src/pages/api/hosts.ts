@@ -1,10 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+export const config = { runtime: 'edge' };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
@@ -39,13 +40,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         last_accepted_beds: lastAcceptedMap[h.id]?.beds || null,
       }));
 
-      return res.status(200).json(hostsWithLastAccepted);
+      return new Response(JSON.stringify(hostsWithLastAccepted), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     if (req.method === 'POST') {
       // Create new host
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      
+      const body = await req.json();
+
       const { data, error } = await supabase
         .from('hosts')
         .insert({
@@ -63,16 +67,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
 
       if (error) throw error;
-      return res.status(200).json(data);
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     if (req.method === 'PUT') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const body = await req.json();
       const { id, ...updates } = body;
-      
+
       // Add updated_at timestamp
       updates.updated_at = new Date().toISOString();
-      
+
       const { data, error } = await supabase
         .from('hosts')
         .update(updates)
@@ -81,23 +88,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .single();
 
       if (error) throw error;
-      return res.status(200).json(data);
+      return new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     if (req.method === 'DELETE') {
-      const { id } = req.query;
+      const id = req.nextUrl.searchParams.get('id');
       const { error } = await supabase
         .from('hosts')
         .delete()
         .eq('id', id);
 
       if (error) throw error;
-      return res.status(200).json({ success: true });
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    return res.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error: any) {
     console.error('API Error:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error' });
+    return new Response(JSON.stringify({ error: error.message || 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

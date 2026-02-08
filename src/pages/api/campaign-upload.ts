@@ -1,71 +1,58 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import formidable from 'formidable';
-import fs from 'fs';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+export const config = { runtime: 'edge' };
 
-export const config = {
-  api: {
-    bodyParser: false, // Disable body parsing for file uploads
-  },
-};
-
-// Helper to parse form data
-const parseForm = (req: NextApiRequest): Promise<{ fields: formidable.Fields; files: formidable.Files }> => {
-  return new Promise((resolve, reject) => {
-    const form = formidable({ maxFileSize: 20 * 1024 * 1024 }); // 20MB
-    form.parse(req, (err, fields, files) => {
-      if (err) reject(err);
-      else resolve({ fields, files });
-    });
-  });
-};
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextRequest) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { fields, files } = await parseForm(req);
-    
-    const campaignId = Array.isArray(fields.campaignId) ? fields.campaignId[0] : fields.campaignId;
-    
+    const formData = await req.formData();
+
+    const campaignId = formData.get('campaignId') as string | null;
+
     if (!campaignId) {
-      return res.status(400).json({ error: 'Campaign ID is required' });
+      return new Response(JSON.stringify({ error: 'Campaign ID is required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
-    
-    const file = files.file;
+
+    const file = formData.get('file') as File | null;
     if (!file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return new Response(JSON.stringify({ error: 'No file uploaded' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
-    
-    const uploadedFile = Array.isArray(file) ? file[0] : file;
-    const fileBuffer = fs.readFileSync(uploadedFile.filepath);
+
+    const buffer = await file.arrayBuffer();
+    const fileBytes = new Uint8Array(buffer);
     const fileName = `campaign-${campaignId}-${Date.now()}.mp3`;
-    
+
     // Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('recordings')
-      .upload(fileName, fileBuffer, {
+      .upload(fileName, fileBytes, {
         contentType: 'audio/mpeg',
         upsert: true
       });
 
-    // Clean up temp file
-    try {
-      fs.unlinkSync(uploadedFile.filepath);
-    } catch (e) {
-      console.error('Error cleaning up temp file:', e);
-    }
-
     if (uploadError) {
       console.error('Storage upload error:', uploadError);
-      return res.status(500).json({ error: 'Failed to upload file to storage: ' + uploadError.message });
+      return new Response(JSON.stringify({ error: 'Failed to upload file to storage: ' + uploadError.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
     // Get public URL
@@ -82,16 +69,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (updateError) {
       console.error('Campaign update error:', updateError);
-      return res.status(500).json({ error: 'Failed to update campaign: ' + updateError.message });
+      return new Response(JSON.stringify({ error: 'Failed to update campaign: ' + updateError.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    return res.status(200).json({ 
-      success: true, 
+    return new Response(JSON.stringify({
+      success: true,
       url: publicUrl,
-      campaign 
+      campaign
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
     });
   } catch (error: any) {
     console.error('Upload error:', error);
-    return res.status(500).json({ error: error.message || 'Upload failed' });
+    return new Response(JSON.stringify({ error: error.message || 'Upload failed' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

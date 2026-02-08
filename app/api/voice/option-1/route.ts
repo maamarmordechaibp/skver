@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { LaMLResponses } from '@/lib/laml-builder';
 import { getHostByPhone } from '@/lib/supabase-server';
 
+export const runtime = 'edge';
+
 export async function POST(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
