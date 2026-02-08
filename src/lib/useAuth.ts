@@ -7,8 +7,8 @@ let _supabase: SupabaseClient | null = null;
 export function getSupabase(): SupabaseClient {
   if (!_supabase) {
     _supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder'
+      process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://kzxveopoyooaxvejjtve.supabase.co',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6eHZlb3BveW9vYXh2ZWpqdHZlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxMzc4OTgsImV4cCI6MjA4NTcxMzg5OH0.9X8BB4hruzkaHIrvlrd9GkDS4rSzqVLT5c13XFhrFE0'
     );
   }
   return _supabase;

@@ -32,7 +32,7 @@ export default function Login() {
     });
 
     if (authError) {
-      setError('Invalid email or password');
+      setError(`Login failed: ${authError.message} (${authError.status || 'no status'})`);
       setLoading(false);
       return;
     }
