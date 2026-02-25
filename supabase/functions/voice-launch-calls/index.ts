@@ -350,8 +350,7 @@ serve(async (req) => {
           }
         );
         results.push({ host_id: qItem.host_id, status: 'failed', reason: 'no phone number' });
-        continue;
-      }
+      } else {
       
       // Build the webhook URL for when the call connects
       const webhookParams = new URLSearchParams({
@@ -405,6 +404,7 @@ serve(async (req) => {
           }
         );
         results.push({ host_id: host.id, name: host.name, status: 'failed', error: callResult.error });
+      }
       }
     }
     

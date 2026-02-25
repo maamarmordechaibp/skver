@@ -214,7 +214,7 @@ export default async function handler(req: NextRequest) {
           // Never-accepted hosts get highest priority (called first)
           // Among accepted hosts, longer since last acceptance = higher priority
           const now = Date.now();
-          const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+          const ONE_DAY_MS = 24 * 60 * 60 * 1000;
           const scoredHosts = hosts.map((h: any) => {
             const lastDate = lastAccepted[h.id];
             let score: number;
@@ -222,11 +222,11 @@ export default async function handler(req: NextRequest) {
               // Never accepted - highest priority
               score = 10000 + Math.floor(Math.random() * 100);
             } else {
-              // Weeks since last acceptance = priority
-              // 0 = accepted this week (lowest priority)
-              // 1 = accepted last week, etc.
-              const weeksSince = Math.floor((now - new Date(lastDate).getTime()) / ONE_WEEK_MS);
-              score = weeksSince * 100 + Math.floor(Math.random() * 50);
+              // Days since last acceptance = priority
+              // Accepted today or this week = score near 0 (lowest priority, called last)
+              // Accepted 14+ days ago = score 1400+ (high priority)
+              const daysSince = Math.floor((now - new Date(lastDate).getTime()) / ONE_DAY_MS);
+              score = daysSince * 100 + Math.floor(Math.random() * 50);
             }
             return { ...h, priority_score: score };
           });
