@@ -168,8 +168,8 @@ serve(async (req) => {
           console.error('Recount error:', e);
         }
         
-        if (camp && camp.status === 'active') {
-          // Always call next host — don't stop at target (going over is fine)
+        if (camp && camp.status === 'active' && actualBeds < (camp.beds_needed || 999999)) {
+          // Still need beds — call next host
           // Recompute scores fresh for remaining pending hosts
           const allPendingRes = await fetch(
             `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&select=id,host_id`,
@@ -277,6 +277,14 @@ serve(async (req) => {
               body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
             });
           }
+        } else if (camp && camp.status === 'active' && actualBeds >= (camp.beds_needed || 999999)) {
+          // Target reached - stop calling, mark campaign complete
+          console.log(`Campaign ${campaignId}: target reached (${actualBeds}/${camp.beds_needed}), completing`);
+          await fetch(`${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}&status=eq.active`, {
+            method: 'PATCH',
+            headers: DB_HEADERS,
+            body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
+          });
         }
       }
       
