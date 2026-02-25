@@ -168,8 +168,8 @@ serve(async (req) => {
           console.error('Recount error:', e);
         }
         
-        if (camp && camp.status === 'active' && actualBeds < camp.beds_needed) {
-          // Still need beds — pick next host using rotation-based priority
+        if (camp && camp.status === 'active') {
+          // Always call next host — don't stop at target (going over is fine)
           // Recompute scores fresh for remaining pending hosts
           const allPendingRes = await fetch(
             `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&select=id,host_id`,
@@ -277,19 +277,6 @@ serve(async (req) => {
               body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
             });
           }
-        } else if (camp && actualBeds >= camp.beds_needed) {
-          // Target reached - complete campaign and cancel remaining
-          console.log(`Campaign ${campaignId}: target reached (${actualBeds}/${camp.beds_needed}), completing`);
-          await fetch(`${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}&status=eq.active`, {
-            method: 'PATCH',
-            headers: DB_HEADERS,
-            body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
-          });
-          await fetch(`${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending`, {
-            method: 'PATCH',
-            headers: DB_HEADERS,
-            body: JSON.stringify({ status: 'cancelled' }),
-          });
         }
       }
       
@@ -338,18 +325,6 @@ serve(async (req) => {
       });
     }
 
-    // Check if campaign already hit target
-    if (campaign.beds_confirmed >= campaign.beds_needed && campaign.beds_needed > 0) {
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: 'Campaign target already reached',
-        called: 0 
-      }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      });
-    }
-    
     // Get ALL pending queue items for this campaign (we'll recompute priority ourselves)
     const queueRes = await fetch(
       `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&select=id,host_id,priority_score`,

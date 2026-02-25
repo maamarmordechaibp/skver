@@ -82,9 +82,13 @@ export default function CampaignsPage() {
     }
   }, [selectedCampaign]);
 
-  // Auto-refresh queue every 3 seconds while campaign is active
+  // Auto-refresh queue every 3 seconds while campaign is active (or has calling items)
   useEffect(() => {
-    if (selectedCampaign && selectedCampaign.status === 'active') {
+    if (!selectedCampaign) return;
+    const isActive = selectedCampaign.status === 'active';
+    // Also poll if there are any "calling" queue items (catches transition to completed)
+    const hasCalling = queue.some(q => q.status === 'calling');
+    if (isActive || hasCalling) {
       const interval = setInterval(() => {
         fetchQueue(selectedCampaign.id);
         fetchResponses(selectedCampaign.id);
@@ -93,7 +97,7 @@ export default function CampaignsPage() {
       }, 3000);
       return () => clearInterval(interval);
     }
-  }, [selectedCampaign]);
+  }, [selectedCampaign, queue]);
 
   const fetchCampaigns = async () => {
     try {
