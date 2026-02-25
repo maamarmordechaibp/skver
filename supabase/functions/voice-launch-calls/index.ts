@@ -145,8 +145,30 @@ serve(async (req) => {
         );
         const campCheck = await campCheckRes.json();
         const camp = campCheck?.[0];
+
+        // Recount beds from accepted responses (don't trust beds_confirmed counter)
+        let actualBeds = camp?.beds_confirmed || 0;
+        try {
+          const countRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/responses?campaign_id=eq.${campaignId}&response_type=eq.accepted&select=beds_offered`,
+            { headers: DB_HEADERS }
+          );
+          const accepted = await countRes.json();
+          actualBeds = (accepted || []).reduce((sum: number, r: any) => sum + (r.beds_offered || 0), 0);
+          console.log(`Status callback: recounted beds=${actualBeds} from ${(accepted || []).length} accepted responses (DB says ${camp?.beds_confirmed})`);
+          // Sync the counter
+          if (actualBeds !== camp?.beds_confirmed) {
+            await fetch(`${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}`, {
+              method: 'PATCH',
+              headers: DB_HEADERS,
+              body: JSON.stringify({ beds_confirmed: actualBeds }),
+            });
+          }
+        } catch (e) {
+          console.error('Recount error:', e);
+        }
         
-        if (camp && camp.status === 'active' && camp.beds_confirmed < camp.beds_needed) {
+        if (camp && camp.status === 'active' && actualBeds < camp.beds_needed) {
           // Still need beds — pick next host using rotation-based priority
           // Recompute scores fresh for remaining pending hosts
           const allPendingRes = await fetch(
@@ -255,9 +277,9 @@ serve(async (req) => {
               body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
             });
           }
-        } else if (camp && camp.beds_confirmed >= camp.beds_needed) {
+        } else if (camp && actualBeds >= camp.beds_needed) {
           // Target reached - complete campaign and cancel remaining
-          console.log(`Campaign ${campaignId}: target reached (${camp.beds_confirmed}/${camp.beds_needed}), completing`);
+          console.log(`Campaign ${campaignId}: target reached (${actualBeds}/${camp.beds_needed}), completing`);
           await fetch(`${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}&status=eq.active`, {
             method: 'PATCH',
             headers: DB_HEADERS,

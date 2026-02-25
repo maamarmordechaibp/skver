@@ -79,9 +79,15 @@ serve(async (req) => {
           }
         );
 
-        // Update campaign beds_confirmed
-        if (campaignId && campaigns?.[0]) {
-          const newConfirmed = (campaigns[0].beds_confirmed || 0) + (host.total_beds || 0);
+        // Recount beds_confirmed from actual accepted responses
+        if (campaignId) {
+          const countRes = await fetch(
+            `${supabaseUrl}/rest/v1/responses?campaign_id=eq.${campaignId}&response_type=eq.accepted&select=beds_offered`,
+            { headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' } }
+          );
+          const accepted = await countRes.json();
+          const totalConfirmed = (accepted || []).reduce((sum: number, r: any) => sum + (r.beds_offered || 0), 0);
+          console.log(`Recounted beds_confirmed=${totalConfirmed} from ${(accepted || []).length} accepted responses`);
           await fetch(
             `${supabaseUrl}/rest/v1/campaigns?id=eq.${campaignId}`,
             {
@@ -92,7 +98,7 @@ serve(async (req) => {
                 'Content-Type': 'application/json',
                 'Prefer': 'return=minimal'
               },
-              body: JSON.stringify({ beds_confirmed: newConfirmed })
+              body: JSON.stringify({ beds_confirmed: totalConfirmed })
             }
           );
         }

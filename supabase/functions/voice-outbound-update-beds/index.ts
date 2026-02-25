@@ -39,19 +39,19 @@ serve(async (req) => {
       }),
     });
 
-    // Update campaign beds_confirmed
-    const campRes = await fetch(
-      `${supabaseUrl}/rest/v1/campaigns?id=eq.${campaignId}&select=beds_confirmed`,
+    // Recount beds_confirmed from actual accepted responses
+    const countRes = await fetch(
+      `${supabaseUrl}/rest/v1/responses?campaign_id=eq.${campaignId}&response_type=eq.accepted&select=beds_offered`,
       { headers }
     );
-    const camps = await campRes.json();
-    if (camps?.[0]) {
-      await fetch(`${supabaseUrl}/rest/v1/campaigns?id=eq.${campaignId}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify({ beds_confirmed: (camps[0].beds_confirmed || 0) + beds }),
-      });
-    }
+    const accepted = await countRes.json();
+    const totalConfirmed = (accepted || []).reduce((sum: number, r: any) => sum + (r.beds_offered || 0), 0);
+    console.log(`Recounted beds_confirmed=${totalConfirmed} from ${(accepted || []).length} accepted responses`);
+    await fetch(`${supabaseUrl}/rest/v1/campaigns?id=eq.${campaignId}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ beds_confirmed: totalConfirmed }),
+    });
 
     // Update host total_beds
     await fetch(`${supabaseUrl}/rest/v1/hosts?id=eq.${hostId}`, {
