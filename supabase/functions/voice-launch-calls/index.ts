@@ -101,7 +101,6 @@ serve(async (req) => {
         let queueStatus = 'completed';
         if (callStatus === 'no-answer' || callStatus === 'busy') queueStatus = 'no_answer';
         else if (callStatus === 'failed' || callStatus === 'canceled') queueStatus = 'failed';
-        else if (callStatus === 'completed') queueStatus = 'completed';
         
         // Update call_logs
         await fetch(
@@ -113,17 +112,33 @@ serve(async (req) => {
           }
         );
         
-        // Update queue entry for THIS specific campaign + host (only if still "calling")
-        await fetch(
-          `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&host_id=eq.${hostId}&status=eq.calling`,
-          {
-            method: 'PATCH',
-            headers: DB_HEADERS,
-            body: JSON.stringify({ status: queueStatus, completed_at: new Date().toISOString() }),
-          }
-        );
+        // Update queue entry — no status filter so it works even if voice-outbound-response
+        // already updated it. We only make it "worse" (no_answer/failed) if not already completed.
+        if (queueStatus !== 'completed') {
+          // For no_answer/failed: only update if still "calling" (don't overwrite voice-outbound-response's "completed")
+          await fetch(
+            `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&host_id=eq.${hostId}&status=eq.calling`,
+            {
+              method: 'PATCH',
+              headers: DB_HEADERS,
+              body: JSON.stringify({ status: queueStatus, completed_at: new Date().toISOString() }),
+            }
+          );
+        } else {
+          // For completed: update regardless of current status to ensure it's marked done
+          await fetch(
+            `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&host_id=eq.${hostId}&status=in.(calling,pending)`,
+            {
+              method: 'PATCH',
+              headers: DB_HEADERS,
+              body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
+            }
+          );
+        }
         
-        // --- Auto-continue: check if more calls needed for THIS campaign ---
+        // --- Auto-continue: always try to launch the next call ---
+        // Don't check for "calling" entries — just go straight to the next pending host.
+        // This avoids the bug where a stale "calling" entry blocks progress.
         const campCheckRes = await fetch(
           `${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}&select=id,beds_needed,beds_confirmed,status,custom_message_url`,
           { headers: DB_HEADERS }
@@ -132,85 +147,74 @@ serve(async (req) => {
         const camp = campCheck?.[0];
         
         if (camp && camp.status === 'active' && camp.beds_confirmed < camp.beds_needed) {
-          // Still need beds - check if there are active calls in progress for THIS campaign
-          const callingRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.calling&select=id`,
+          // Still need beds — launch next pending host
+          const nextPendingRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&order=priority_score.desc.nullslast,created_at.asc&limit=1&select=id,host_id`,
             { headers: DB_HEADERS }
           );
-          const callingItems = await callingRes.json();
+          const nextPending = await nextPendingRes.json();
           
-          if (!callingItems?.length) {
-            // No active calls - launch next pending host
-            const nextPendingRes = await fetch(
-              `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&order=priority_score.desc.nullslast,created_at.asc&limit=1&select=id,host_id`,
+          if (nextPending?.length > 0) {
+            const nextItem = nextPending[0];
+            const nextHostRes = await fetch(
+              `${SUPABASE_URL}/rest/v1/hosts?id=eq.${nextItem.host_id}&select=id,name,phone_number,total_beds`,
               { headers: DB_HEADERS }
             );
-            const nextPending = await nextPendingRes.json();
+            const nextHostData = await nextHostRes.json();
+            const nextHost = nextHostData?.[0];
             
-            if (nextPending?.length > 0) {
-              const nextItem = nextPending[0];
-              const nextHostRes = await fetch(
-                `${SUPABASE_URL}/rest/v1/hosts?id=eq.${nextItem.host_id}&select=id,name,phone_number,total_beds`,
-                { headers: DB_HEADERS }
-              );
-              const nextHostData = await nextHostRes.json();
-              const nextHost = nextHostData?.[0];
-              
-              if (nextHost?.phone_number) {
-                const functionsUrl = `${SUPABASE_URL}/functions/v1`;
-                const webhookParams = new URLSearchParams({
-                  campaign_id: campaignId,
-                  host_id: nextHost.id,
-                  host_name: nextHost.name || 'Guest',
-                  total_beds: String(nextHost.total_beds || 0),
-                  message_url: camp.custom_message_url || '',
-                });
-                const webhookUrl = `${functionsUrl}/voice-outbound-call?${webhookParams.toString()}`;
-                
-                console.log(`Auto-continue: calling ${nextHost.name} (${nextHost.phone_number}) for campaign ${campaignId}`);
-                const callResult = await makeCall(nextHost.phone_number, webhookUrl, campaignId, nextHost.id);
-                
-                if (callResult.success) {
-                  await fetch(`${SUPABASE_URL}/rest/v1/call_queue?id=eq.${nextItem.id}`, {
-                    method: 'PATCH',
-                    headers: DB_HEADERS,
-                    body: JSON.stringify({ status: 'calling' }),
-                  });
-                  
-                  fetch(`${SUPABASE_URL}/rest/v1/call_logs`, {
-                    method: 'POST',
-                    headers: { ...DB_HEADERS, 'Prefer': 'return=minimal' },
-                    body: JSON.stringify({
-                      call_sid: callResult.callSid,
-                      direction: 'outbound',
-                      from_number: SIGNALWIRE_PHONE_NUMBER,
-                      to_number: nextHost.phone_number,
-                      status: 'initiated',
-                      host_id: nextHost.id,
-                    }),
-                  }).catch(e => console.error('Call log error:', e));
-                  
-                  console.log(`Auto-continue success: SID=${callResult.callSid}`);
-                } else {
-                  await fetch(`${SUPABASE_URL}/rest/v1/call_queue?id=eq.${nextItem.id}`, {
-                    method: 'PATCH',
-                    headers: DB_HEADERS,
-                    body: JSON.stringify({ status: 'failed' }),
-                  });
-                  console.error(`Auto-continue call failed: ${callResult.error}`);
-                }
-              }
-            } else {
-              // No more pending hosts - mark campaign complete
-              console.log(`Campaign ${campaignId}: no more pending hosts, marking complete`);
-              await fetch(`${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}`, {
-                method: 'PATCH',
-                headers: DB_HEADERS,
-                body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
+            if (nextHost?.phone_number) {
+              const functionsUrl = `${SUPABASE_URL}/functions/v1`;
+              const webhookParams = new URLSearchParams({
+                campaign_id: campaignId,
+                host_id: nextHost.id,
+                host_name: nextHost.name || 'Guest',
+                total_beds: String(nextHost.total_beds || 0),
+                message_url: camp.custom_message_url || '',
               });
+              const webhookUrl = `${functionsUrl}/voice-outbound-call?${webhookParams.toString()}`;
+              
+              console.log(`Auto-continue: calling ${nextHost.name} (${nextHost.phone_number}) for campaign ${campaignId}`);
+              const callResult = await makeCall(nextHost.phone_number, webhookUrl, campaignId, nextHost.id);
+              
+              if (callResult.success) {
+                await fetch(`${SUPABASE_URL}/rest/v1/call_queue?id=eq.${nextItem.id}`, {
+                  method: 'PATCH',
+                  headers: DB_HEADERS,
+                  body: JSON.stringify({ status: 'calling' }),
+                });
+                
+                fetch(`${SUPABASE_URL}/rest/v1/call_logs`, {
+                  method: 'POST',
+                  headers: { ...DB_HEADERS, 'Prefer': 'return=minimal' },
+                  body: JSON.stringify({
+                    call_sid: callResult.callSid,
+                    direction: 'outbound',
+                    from_number: SIGNALWIRE_PHONE_NUMBER,
+                    to_number: nextHost.phone_number,
+                    status: 'initiated',
+                    host_id: nextHost.id,
+                  }),
+                }).catch(e => console.error('Call log error:', e));
+                
+                console.log(`Auto-continue success: SID=${callResult.callSid}`);
+              } else {
+                await fetch(`${SUPABASE_URL}/rest/v1/call_queue?id=eq.${nextItem.id}`, {
+                  method: 'PATCH',
+                  headers: DB_HEADERS,
+                  body: JSON.stringify({ status: 'failed' }),
+                });
+                console.error(`Auto-continue call failed: ${callResult.error}`);
+              }
             }
           } else {
-            console.log(`Campaign ${campaignId}: ${callingItems.length} call(s) still active, waiting`);
+            // No more pending hosts - mark campaign complete
+            console.log(`Campaign ${campaignId}: no more pending hosts, marking complete`);
+            await fetch(`${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}`, {
+              method: 'PATCH',
+              headers: DB_HEADERS,
+              body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
+            });
           }
         } else if (camp && camp.beds_confirmed >= camp.beds_needed) {
           // Target reached - complete campaign and cancel remaining
