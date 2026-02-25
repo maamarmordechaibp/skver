@@ -210,20 +210,23 @@ export default async function handler(req: NextRequest) {
             .eq('campaign_id', body.campaignId);
           console.log('Deleted old queue items:', delErr ? `Error: ${delErr.message}` : 'OK');
 
-          // Calculate priority: beds matter, but recently-accepted hosts go to back
-          // Score = total_beds * 100 - recency_penalty
-          // Hosts who never accepted: full score (beds * 100)
-          // Hosts who accepted recently: beds * 100 - days_since (more recent = bigger penalty)
+          // Priority is purely rotation-based: hosts who accepted recently go to back
+          // Never-accepted hosts get highest priority (called first)
+          // Among accepted hosts, longer since last acceptance = higher priority
           const now = Date.now();
+          const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
           const scoredHosts = hosts.map((h: any) => {
-            let score = (h.total_beds || 0) * 100;
             const lastDate = lastAccepted[h.id];
-            if (lastDate) {
-              const daysSince = Math.floor((now - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24));
-              // Recent acceptance = big penalty (up to 1000 for today, decreasing over time)
-              // After ~10 days the penalty is gone
-              const penalty = Math.max(0, 1000 - (daysSince * 100));
-              score -= penalty;
+            let score: number;
+            if (!lastDate) {
+              // Never accepted - highest priority
+              score = 10000 + Math.floor(Math.random() * 100);
+            } else {
+              // Weeks since last acceptance = priority
+              // 0 = accepted this week (lowest priority)
+              // 1 = accepted last week, etc.
+              const weeksSince = Math.floor((now - new Date(lastDate).getTime()) / ONE_WEEK_MS);
+              score = weeksSince * 100 + Math.floor(Math.random() * 50);
             }
             return { ...h, priority_score: score };
           });

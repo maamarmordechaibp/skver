@@ -1,9 +1,41 @@
 /**
  * voice-save-new-beds - Save beds for unregistered caller
+ * Also enriches host with name/address from external API
  * Also records a response to the active campaign if one exists
  */
 
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
+
+const EXTERNAL_API_KEY = Deno.env.get('EXTERNAL_API_KEY') || '';
+const EXTERNAL_API_URL = 'https://wbqcdldbktrchmcareaz.supabase.co/functions/v1/external-api';
+
+async function lookupContact(phone: string): Promise<any> {
+  if (!EXTERNAL_API_KEY) return null;
+  const digits = phone.replace(/\D/g, '');
+  const last10 = digits.slice(-10);
+  const last7 = digits.slice(-7);
+  const formats = [
+    last7.slice(0, 3) + '-' + last7.slice(3),
+    `(${last10.slice(0, 3)}) ${last10.slice(3, 6)}-${last10.slice(6)}`,
+    last10,
+    phone,
+  ];
+  for (const format of formats) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${EXTERNAL_API_URL}/contacts?q=${encodeURIComponent(format)}`, {
+        headers: { 'X-API-Key': EXTERNAL_API_KEY, 'Content-Type': 'application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.success && data.contacts?.length > 0) return data.contacts[0];
+    } catch (e) { console.error('External API error:', e); }
+  }
+  return null;
+}
 
 serve(async (req) => {
   try {
@@ -24,6 +56,21 @@ serve(async (req) => {
 
     console.log(`Saving ${bedsNum} beds for ${from}`);
 
+    // Look up contact from external API for name/address enrichment
+    const contact = await lookupContact(from);
+    const updateData: Record<string, any> = { total_beds: bedsNum, is_registered: true };
+    if (contact) {
+      const name = [contact.first_name || '', contact.last_name || ''].filter(Boolean).join(' ').trim();
+      if (name) updateData.name = name;
+      const address1 = [contact.street_number || '', contact.street || ''].filter(Boolean).join(' ').trim();
+      if (address1) updateData.address_1 = address1;
+      if (contact.apartment) updateData.address_2 = contact.apartment;
+      if (contact.city) updateData.city = contact.city;
+      if (contact.state) updateData.state = contact.state;
+      if (contact.zip) updateData.zip = contact.zip;
+      console.log('Enriching host with external data:', JSON.stringify(updateData));
+    }
+
     // Update host via REST + get host id back
     let hostId: string | null = null;
     if (from) {
@@ -32,7 +79,7 @@ serve(async (req) => {
         {
           method: 'PATCH',
           headers: { ...dbHeaders, 'Prefer': 'return=representation' },
-          body: JSON.stringify({ total_beds: bedsNum, is_registered: true }),
+          body: JSON.stringify(updateData),
         }
       );
       const updated = await res.json();

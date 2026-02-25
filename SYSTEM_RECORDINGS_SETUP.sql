@@ -53,13 +53,13 @@ INSERT INTO system_recordings (key, name, description, category, tts_text, use_t
  'All beds are completed for this week. We dont need any beds at this time. Thank you for your willingness to help. Have a good Shabbat.', true, 41),
 
 -- REGISTRATION FLOW
-('registration_beds_prompt', 'Registration - How Many Beds', 'Ask new host how many beds: "How many beds do you have available?"', 'registration',
- 'How many beds do you have available? Enter the number and press pound.', true, 50),
+('registration_beds_prompt', 'Registration - Beds Prompt', 'Welcome message + ask for beds when pressing 2 to register', 'registration',
+ 'Welcome to host registration. Please enter the number of beds you can offer, then press pound.', true, 50),
 
-('private_or_not', 'Private Place Question', 'Ask if private home: "Is this a private place? Press 1 for yes, press 2 for no"', 'registration',
- 'Is this a private place? Press 1 for yes, press 2 for no.', true, 51),
+('private_or_not', 'Private or Home', 'Ask if private or home accommodation: "Is this a private accommodation or your home? Press 1 for private, press 2 for home"', 'registration',
+ 'Is this a private accommodation or your home? Press 1 for private, press 2 for home.', true, 51),
 
-('registration_thank_you', 'Registration Complete', 'Thank you after registration', 'registration',
+('registration_thank_you', 'Registration Complete', 'Thank you after registration completes', 'registration',
  'Thank you for registering. We will contact you when we need beds. Have a good Shabbat.', true, 52),
 
 -- OUTBOUND CALLS (Campaign)
