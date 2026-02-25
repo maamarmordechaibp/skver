@@ -82,7 +82,7 @@ export default async function handler(req: NextRequest) {
     if (req.method === 'GET' && action === 'responses') {
       const { data, error } = await supabase
         .from('responses')
-        .select('*, host:host_id(name, phone_number, city)')
+        .select('*, host:host_id(name, phone_number, city, address_1, address_2)')
         .eq('campaign_id', campaignId)
         .order('responded_at', { ascending: false });
 
@@ -93,6 +93,7 @@ export default async function handler(req: NextRequest) {
         host_name: r.host?.name,
         host_phone: r.host?.phone_number,
         host_city: r.host?.city,
+        host_address: [r.host?.address_1, r.host?.address_2, r.host?.city].filter(Boolean).join(', '),
       }));
       return new Response(JSON.stringify(formatted), {
         status: 200,

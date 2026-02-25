@@ -30,6 +30,7 @@ interface Response {
   host_id: string;
   host_name?: string;
   host_phone?: string;
+  host_address?: string;
   beds_offered: number;
   response_type: string;
   responded_at: string;
@@ -314,12 +315,13 @@ export default function CampaignsPage() {
           </div>
           <h2>Accepted Hosts (${responses.filter(r => r.response_type === 'accepted').length})</h2>
           <table>
-            <tr><th>#</th><th>Name</th><th>Phone</th><th>Beds</th><th>Response Time</th></tr>
+            <tr><th>#</th><th>Name</th><th>Phone</th><th>Address</th><th>Beds</th><th>Response Time</th></tr>
             ${responses.filter(r => r.response_type === 'accepted').map((r, i) => `
               <tr>
                 <td>${i + 1}</td>
                 <td>${r.host_name || 'Unknown'}</td>
                 <td>${r.host_phone || '-'}</td>
+                <td>${r.host_address || '-'}</td>
                 <td><strong>${r.beds_offered}</strong></td>
                 <td>${new Date(r.responded_at).toLocaleString()}</td>
               </tr>
@@ -327,12 +329,13 @@ export default function CampaignsPage() {
           </table>
           <h2>Declined/Other (${responses.filter(r => r.response_type !== 'accepted').length})</h2>
           <table>
-            <tr><th>#</th><th>Name</th><th>Phone</th><th>Status</th><th>Time</th></tr>
+            <tr><th>#</th><th>Name</th><th>Phone</th><th>Address</th><th>Status</th><th>Time</th></tr>
             ${responses.filter(r => r.response_type !== 'accepted').map((r, i) => `
               <tr>
                 <td>${i + 1}</td>
                 <td>${r.host_name || 'Unknown'}</td>
                 <td>${r.host_phone || '-'}</td>
+                <td>${r.host_address || '-'}</td>
                 <td class="${r.response_type}">${r.response_type.toUpperCase()}</td>
                 <td>${new Date(r.responded_at).toLocaleString()}</td>
               </tr>
