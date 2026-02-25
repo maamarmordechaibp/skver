@@ -147,15 +147,54 @@ serve(async (req) => {
         const camp = campCheck?.[0];
         
         if (camp && camp.status === 'active' && camp.beds_confirmed < camp.beds_needed) {
-          // Still need beds — launch next pending host
-          const nextPendingRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&order=priority_score.desc.nullslast,created_at.asc&limit=1&select=id,host_id`,
+          // Still need beds — pick next host using rotation-based priority
+          // Recompute scores fresh for remaining pending hosts
+          const allPendingRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&select=id,host_id`,
             { headers: DB_HEADERS }
           );
-          const nextPending = await nextPendingRes.json();
+          const allPending = await allPendingRes.json();
           
-          if (nextPending?.length > 0) {
-            const nextItem = nextPending[0];
+          if (allPending?.length > 0) {
+            // Fetch latest accepted responses for scoring
+            const respRes2 = await fetch(
+              `${SUPABASE_URL}/rest/v1/responses?response_type=eq.accepted&select=host_id,responded_at&order=responded_at.desc`,
+              { headers: DB_HEADERS }
+            );
+            const allResp2 = await respRes2.json();
+            const lastAcc2: Record<string, string> = {};
+            for (const r of allResp2 || []) {
+              if (r.host_id && !lastAcc2[r.host_id]) {
+                lastAcc2[r.host_id] = r.responded_at;
+              }
+            }
+
+            const now2 = Date.now();
+            const ONE_DAY2 = 24 * 60 * 60 * 1000;
+            let bestItem: any = null;
+            let bestScore = -1;
+            for (const item of allPending) {
+              const lastDate = lastAcc2[item.host_id];
+              let score: number;
+              if (!lastDate) {
+                score = 10000 + Math.floor(Math.random() * 100);
+              } else {
+                const daysSince = Math.floor((now2 - new Date(lastDate).getTime()) / ONE_DAY2);
+                score = daysSince * 100 + Math.floor(Math.random() * 50);
+              }
+              // Update DB score for frontend visibility
+              fetch(`${SUPABASE_URL}/rest/v1/call_queue?id=eq.${item.id}`, {
+                method: 'PATCH',
+                headers: DB_HEADERS,
+                body: JSON.stringify({ priority_score: score }),
+              }).catch(e => console.error('Score update error:', e));
+              if (score > bestScore) {
+                bestScore = score;
+                bestItem = item;
+              }
+            }
+
+            const nextItem = bestItem;
             const nextHostRes = await fetch(
               `${SUPABASE_URL}/rest/v1/hosts?id=eq.${nextItem.host_id}&select=id,name,phone_number,total_beds`,
               { headers: DB_HEADERS }
@@ -248,6 +287,19 @@ serve(async (req) => {
     
     console.log(`Launching calls for campaign ${campaignId}, batch size ${batchSize}`);
     console.log(`SignalWire config: project=${SIGNALWIRE_PROJECT_ID ? 'SET' : 'MISSING'}, token=${SIGNALWIRE_API_TOKEN ? 'SET' : 'MISSING'}, space=${SIGNALWIRE_SPACE_URL || 'MISSING'}, phone=${SIGNALWIRE_PHONE_NUMBER || 'MISSING'}`);
+
+    // Reset beds_confirmed to 0 and clear old responses so we start fresh
+    // This prevents stale counts from previous runs on the same campaign
+    await fetch(`${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}`, {
+      method: 'PATCH',
+      headers: DB_HEADERS,
+      body: JSON.stringify({ beds_confirmed: 0 }),
+    });
+    await fetch(`${SUPABASE_URL}/rest/v1/responses?campaign_id=eq.${campaignId}`, {
+      method: 'DELETE',
+      headers: DB_HEADERS,
+    });
+    console.log('Reset beds_confirmed=0 and cleared old responses');
     
     // Get campaign info (for custom message URL)
     const campRes = await fetch(
@@ -276,17 +328,13 @@ serve(async (req) => {
       });
     }
     
-    // Get pending queue items ordered by priority (highest beds first)
-    // Use priority_score column - hosts with most beds get highest score
+    // Get ALL pending queue items for this campaign (we'll recompute priority ourselves)
     const queueRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&order=priority_score.desc.nullslast,created_at.asc&limit=${batchSize}&select=id,host_id,priority_score`,
+      `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.pending&select=id,host_id,priority_score`,
       { headers: DB_HEADERS }
     );
     const queueItems = await queueRes.json();
     console.log(`Queue query status: ${queueRes.status}, items found: ${Array.isArray(queueItems) ? queueItems.length : 'NOT_ARRAY: ' + JSON.stringify(queueItems)}`);
-    if (Array.isArray(queueItems)) {
-      console.log('Queue order:', queueItems.map((q: any) => `host=${q.host_id} score=${q.priority_score}`).join(', '));
-    }
     
     if (!queueItems || queueItems.length === 0) {
       return new Response(JSON.stringify({ 
@@ -298,6 +346,47 @@ serve(async (req) => {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
+
+    // --- Recompute priority scores based on rotation fairness ---
+    // Fetch all accepted responses to determine last acceptance per host
+    const respRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/responses?response_type=eq.accepted&select=host_id,responded_at&order=responded_at.desc`,
+      { headers: DB_HEADERS }
+    );
+    const allResponses = await respRes.json();
+    const lastAccepted: Record<string, string> = {};
+    for (const r of allResponses || []) {
+      if (r.host_id && !lastAccepted[r.host_id]) {
+        lastAccepted[r.host_id] = r.responded_at;
+      }
+    }
+
+    const now = Date.now();
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    for (const q of queueItems) {
+      const lastDate = lastAccepted[q.host_id];
+      let score: number;
+      if (!lastDate) {
+        // Never accepted - highest priority (called first)
+        score = 10000 + Math.floor(Math.random() * 100);
+      } else {
+        // Days since last acceptance = priority
+        // Accepted today = score near 0 (called last)
+        // Accepted 14+ days ago = score 1400+ (called sooner)
+        const daysSince = Math.floor((now - new Date(lastDate).getTime()) / ONE_DAY_MS);
+        score = daysSince * 100 + Math.floor(Math.random() * 50);
+      }
+      q.priority_score = score;
+      // Update the DB so the frontend also sees correct scores
+      fetch(`${SUPABASE_URL}/rest/v1/call_queue?id=eq.${q.id}`, {
+        method: 'PATCH',
+        headers: DB_HEADERS,
+        body: JSON.stringify({ priority_score: score }),
+      }).catch(e => console.error('Score update error:', e));
+    }
+    // Sort: highest score first
+    queueItems.sort((a: any, b: any) => b.priority_score - a.priority_score);
+    console.log('Recomputed priority order:', queueItems.map((q: any) => `host=${q.host_id} score=${q.priority_score} lastAccepted=${lastAccepted[q.host_id] || 'never'}`).join(', '));
     
     // Get host details for these queue items
     const hostIds = queueItems.map((q: any) => q.host_id);

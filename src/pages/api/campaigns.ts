@@ -210,6 +210,17 @@ export default async function handler(req: NextRequest) {
             .eq('campaign_id', body.campaignId);
           console.log('Deleted old queue items:', delErr ? `Error: ${delErr.message}` : 'OK');
 
+          // Reset beds_confirmed and delete old responses so we start fresh
+          await supabase
+            .from('campaigns')
+            .update({ beds_confirmed: 0 })
+            .eq('id', body.campaignId);
+          await supabase
+            .from('responses')
+            .delete()
+            .eq('campaign_id', body.campaignId);
+          console.log('Reset beds_confirmed=0 and cleared old responses');
+
           // Priority is purely rotation-based: hosts who accepted recently go to back
           // Never-accepted hosts get highest priority (called first)
           // Among accepted hosts, longer since last acceptance = higher priority
