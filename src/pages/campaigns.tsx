@@ -82,16 +82,18 @@ export default function CampaignsPage() {
     }
   }, [selectedCampaign]);
 
-  // Auto-refresh queue every 5 seconds when calls are active
+  // Auto-refresh queue every 3 seconds while campaign is active
   useEffect(() => {
-    if (selectedCampaign && queue.some(q => q.is_calling || q.status === 'calling')) {
+    if (selectedCampaign && selectedCampaign.status === 'active') {
       const interval = setInterval(() => {
         fetchQueue(selectedCampaign.id);
         fetchResponses(selectedCampaign.id);
-      }, 5000);
+        // Also refresh campaign data to get updated beds_confirmed and status
+        fetchCampaigns();
+      }, 3000);
       return () => clearInterval(interval);
     }
-  }, [selectedCampaign, queue]);
+  }, [selectedCampaign]);
 
   const fetchCampaigns = async () => {
     try {
@@ -101,6 +103,10 @@ export default function CampaignsPage() {
       setCampaigns(data);
       if (data.length > 0 && !selectedCampaign) {
         setSelectedCampaign(data[0]);
+      } else if (selectedCampaign) {
+        // Update selectedCampaign with fresh data (e.g. beds_confirmed, status)
+        const updated = data.find((c: any) => c.id === selectedCampaign.id);
+        if (updated) setSelectedCampaign(updated);
       }
     } catch (err: any) {
       setError(err.message);
