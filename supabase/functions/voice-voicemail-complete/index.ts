@@ -17,6 +17,9 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
     const signalwirePhone = Deno.env.get('SIGNALWIRE_PHONE_NUMBER') || '';
 
+    const resendApiKey = Deno.env.get('RESEND_API_KEY') || '';
+    const adminEmail = Deno.env.get('ADMIN_EMAIL') || '';
+
     console.log(`Voicemail from ${from}, recording: ${recordingUrl}`);
 
     // Log voicemail via REST
@@ -36,6 +39,46 @@ serve(async (req) => {
         recording_url: recordingUrl,
       }),
     }).catch(e => console.error('Log error:', e));
+
+    // Send voicemail email notification
+    if (resendApiKey && adminEmail) {
+      const logoUrl = 'https://skver.pages.dev/logo.jpg';
+      const emailHtml = `<!DOCTYPE html><html><head><style>
+        body{font-family:Arial,sans-serif;color:#333}
+        h1{color:#2c5aa0}
+        .content{background:#f9f9f9;padding:20px;border-radius:8px}
+        .footer{margin-top:20px;color:#666;font-size:12px}
+      </style></head><body>
+        <div style="text-align:center;margin-bottom:20px">
+          <img src="${logoUrl}" alt="Logo" style="width:60px;height:60px;border-radius:50%;object-fit:cover" />
+        </div>
+        <h1>New Voicemail</h1>
+        <div class="content">
+          <p><strong>From:</strong> ${from}</p>
+          <p><strong>Time:</strong> ${new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })}</p>
+          <p><strong>Recording:</strong></p>
+          ${recordingUrl ? `<p><a href="${recordingUrl}">Listen to Recording</a></p>` : '<p>No recording URL available</p>'}
+        </div>
+        <div class="footer"><p>Please follow up with this caller.</p></div>
+      </body></html>`;
+
+      fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${resendApiKey}`,
+        },
+        body: JSON.stringify({
+          from: 'voicemail@machniseiorchim.org',
+          to: adminEmail,
+          subject: `Voicemail from ${from}`,
+          html: emailHtml,
+        }),
+      }).then(r => console.log(`Voicemail email sent: ${r.status}`))
+        .catch(e => console.error('Voicemail email error:', e));
+    } else {
+      console.log('RESEND_API_KEY or ADMIN_EMAIL not set, skipping voicemail email');
+    }
 
     const laml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

@@ -51,7 +51,7 @@ export default function Login() {
   return (
     <>
       <Head>
-        <title>Login - Guest House IVR</title>
+        <title>Login - Machnisei Orchim</title>
       </Head>
       <div style={{
         fontFamily: 'system-ui, sans-serif',
@@ -71,9 +71,9 @@ export default function Login() {
           boxShadow: '0 25px 50px rgba(0,0,0,0.3)',
         }}>
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-            <div style={{ fontSize: '48px', marginBottom: '12px' }}>🏠</div>
+            <img src="/logo.jpg" alt="Logo" style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', margin: '0 auto 12px' }} />
             <h1 style={{ color: 'white', fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0' }}>
-              Guest House IVR
+              Machnisei Orchim
             </h1>
             <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
               Sign in to manage your system

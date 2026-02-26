@@ -12,7 +12,7 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Guest House IVR System</title>
+        <title>Machnisei Orchim - D'Shikun Skvira</title>
         <meta name="description" content="Phone campaign management system" />
       </Head>
       <div style={{ fontFamily: 'system-ui, sans-serif', minHeight: '100vh', background: 'linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%)' }}>
@@ -20,8 +20,8 @@ export default function Home() {
         <nav style={{ background: '#4F46E5', padding: '12px 24px', position: 'sticky', top: 0, zIndex: 100 }}>
           <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '24px' }}>🏠</span>
-              <span style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>Guest House IVR</span>
+              <img src="/logo.jpg" alt="Logo" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+              <span style={{ color: 'white', fontSize: '20px', fontWeight: 'bold' }}>Machnisei Orchim</span>
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <Link href="/dashboard" style={{ color: 'white', textDecoration: 'none', padding: '8px 16px', borderRadius: '8px', background: 'rgba(255,255,255,0.1)', fontSize: '14px', fontWeight: '500' }}>📊 Dashboard</Link>
@@ -38,7 +38,7 @@ export default function Home() {
           {/* Hero Section */}
           <div style={{ textAlign: 'center', marginBottom: '48px' }}>
             <h1 style={{ fontSize: '48px', fontWeight: 'bold', color: 'white', marginBottom: '16px' }}>
-              Guest House IVR System
+              Machnisei Orchim
             </h1>
             <p style={{ fontSize: '20px', color: '#94a3b8', maxWidth: '600px', margin: '0 auto' }}>
               Manage your phone campaigns, track host availability, and coordinate Shabbat guest placement efficiently.

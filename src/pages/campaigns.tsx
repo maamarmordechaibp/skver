@@ -303,7 +303,12 @@ export default function CampaignsPage() {
           </style>
         </head>
         <body>
-          <h1>🏠 Guest House Campaign Report</h1>
+          <div style="text-align: center; margin-bottom: 20px;">
+            <img src="/logo.jpg" alt="Logo" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover;" />
+            <h1 style="margin-top: 10px;">ארגון הכנסת אורחים</h1>
+            <p style="color: #666; margin-top: 0;">D'Shikun Skvira</p>
+          </div>
+          <h2>Campaign Report</h2>
           <p><strong>Shabbat Date:</strong> ${new Date(selectedCampaign.shabbat_date).toLocaleDateString()}</p>
           <p><strong>Status:</strong> ${selectedCampaign.status}</p>
           <div class="summary">
@@ -342,7 +347,7 @@ export default function CampaignsPage() {
             `).join('')}
           </table>
           <hr/>
-          <p style="color: #666; font-size: 12px;">Generated: ${new Date().toLocaleString()} | Guest House IVR System</p>
+          <p style="color: #666; font-size: 12px;">Generated: ${new Date().toLocaleString()} | Machnisei Orchim D'Shikun Skvira</p>
         </body>
       </html>
     `);
@@ -369,7 +374,8 @@ export default function CampaignsPage() {
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%)' }}>
       <nav style={{ background: '#4F46E5', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link href="/" style={{ color: 'white', fontWeight: 'bold', fontSize: '18px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          🏠 Guest House IVR
+          <img src="/logo.jpg" alt="Logo" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+          Machnisei Orchim
         </Link>
         <div style={{ display: 'flex', gap: '8px' }}>
           {['Dashboard', 'Hosts', 'Campaigns', 'Recordings'].map((item) => (

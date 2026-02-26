@@ -159,7 +159,8 @@ export default function RecordingsPage() {
       
       <nav style={{ background: '#4F46E5', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Link href="/" style={{ color: 'white', fontWeight: 'bold', fontSize: '18px', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          🏠 Guest House IVR
+          <img src="/logo.jpg" alt="Logo" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+          Machnisei Orchim
         </Link>
         <div style={{ display: 'flex', gap: '8px' }}>
           {['Dashboard', 'Hosts', 'Campaigns', 'Recordings'].map((item) => (

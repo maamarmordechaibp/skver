@@ -68,6 +68,107 @@ async function makeCall(toNumber: string, webhookUrl: string, campaignId: string
   }
 }
 
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || '';
+const ADMIN_EMAIL = Deno.env.get('ADMIN_EMAIL') || '';
+
+// Send campaign completion report email via Resend
+async function sendCampaignEmail(campaignId: string) {
+  if (!RESEND_API_KEY || !ADMIN_EMAIL) {
+    console.log('RESEND_API_KEY or ADMIN_EMAIL not set, skipping email');
+    return;
+  }
+  try {
+    // Fetch campaign details
+    const campRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/campaigns?id=eq.${campaignId}&select=*`,
+      { headers: DB_HEADERS }
+    );
+    const camps = await campRes.json();
+    if (!camps?.length) return;
+    const camp = camps[0];
+
+    // Fetch responses with host info
+    const respRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/responses?campaign_id=eq.${campaignId}&select=*,hosts(name,phone,address_1,address_2,city)`,
+      { headers: DB_HEADERS }
+    );
+    const responses = await respRes.json() || [];
+
+    const accepted = responses.filter((r: any) => r.response === 'accepted');
+    const declined = responses.filter((r: any) => r.response === 'declined');
+
+    const bedsConfirmed = accepted.reduce((sum: number, r: any) => sum + (r.beds_offered || 0), 0);
+    const progressPercent = camp.beds_needed > 0 ? Math.round((bedsConfirmed / camp.beds_needed) * 100) : 0;
+
+    const acceptedRows = accepted.map((r: any) => {
+      const h = r.hosts || {};
+      const addr = [h.address_1, h.address_2, h.city].filter(Boolean).join(', ');
+      return `<tr><td>${h.name || 'Unknown'}</td><td>${h.phone || ''}</td><td>${addr}</td><td>${r.beds_offered || 0}</td></tr>`;
+    }).join('');
+
+    const declinedRows = declined.map((r: any) => {
+      const h = r.hosts || {};
+      return `<tr><td>${h.name || 'Unknown'}</td><td>${h.phone || ''}</td></tr>`;
+    }).join('');
+
+    const logoUrl = 'https://skver.pages.dev/logo.jpg';
+
+    const html = `<!DOCTYPE html><html><head><style>
+      body{font-family:Arial,sans-serif;color:#333}
+      h1{color:#2c5aa0}h2{color:#2c5aa0;margin-top:30px}
+      .summary{background:#f0f0f0;padding:20px;border-radius:8px;margin-bottom:20px}
+      .metric{margin-bottom:10px}.metric-label{font-weight:bold}
+      table{width:100%;border-collapse:collapse;margin-bottom:20px}
+      th{background:#2c5aa0;color:white;padding:10px;text-align:left}
+      td{padding:10px;border-bottom:1px solid #ddd}
+      .progress-bar{width:100%;height:30px;background:#e0e0e0;border-radius:4px;overflow:hidden;margin:10px 0}
+      .progress-fill{height:100%;background:linear-gradient(90deg,#4CAF50,#45a049);width:${progressPercent}%;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold}
+      .footer{margin-top:40px;padding-top:20px;border-top:1px solid #ddd;color:#666;font-size:12px}
+    </style></head><body>
+      <div style="text-align:center;margin-bottom:20px">
+        <img src="${logoUrl}" alt="Logo" style="width:80px;height:80px;border-radius:50%;object-fit:cover" />
+        <h1 style="margin-top:10px">ארגון הכנסת אורחים</h1>
+        <p style="color:#666;margin-top:0">D'Shikun Skvira</p>
+      </div>
+      <h2>Campaign Report</h2>
+      <p>Shabbat Date: <strong>${camp.shabbat_date || ''}</strong></p>
+      <div class="summary">
+        <h2>Summary</h2>
+        <div class="metric"><span class="metric-label">Beds Needed:</span> ${camp.beds_needed || 0}</div>
+        <div class="metric"><span class="metric-label">Beds Confirmed:</span> ${bedsConfirmed}</div>
+        <div class="metric"><span class="metric-label">Progress:</span>
+          <div class="progress-bar"><div class="progress-fill">${progressPercent}%</div></div>
+        </div>
+        <div class="metric"><span class="metric-label">Acceptance Rate:</span> ${accepted.length} accepted, ${declined.length} declined</div>
+      </div>
+      ${accepted.length > 0 ? `<h2>Acceptances (${accepted.length})</h2>
+        <table><thead><tr><th>Host Name</th><th>Phone</th><th>Address</th><th>Beds</th></tr></thead>
+        <tbody>${acceptedRows}</tbody></table>` : ''}
+      ${declined.length > 0 ? `<h2>Declines (${declined.length})</h2>
+        <table><thead><tr><th>Host Name</th><th>Phone</th></tr></thead>
+        <tbody>${declinedRows}</tbody></table>` : ''}
+      <div class="footer"><p>Automated report from Machnisei Orchim D'Shikun Skvira</p></div>
+    </body></html>`;
+
+    const emailRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: 'reports@machniseiorchim.org',
+        to: ADMIN_EMAIL,
+        subject: `Campaign Report - Shabbat ${camp.shabbat_date || ''}`,
+        html,
+      }),
+    });
+    console.log(`Campaign email sent: ${emailRes.status}`);
+  } catch (e) {
+    console.error('Failed to send campaign email:', e);
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -276,6 +377,8 @@ serve(async (req) => {
               headers: DB_HEADERS,
               body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
             });
+            // Send completion report email
+            await sendCampaignEmail(campaignId);
           }
         } else if (camp && camp.status === 'active' && actualBeds >= (camp.beds_needed || 999999)) {
           // Target reached - stop calling, mark campaign complete
@@ -285,6 +388,8 @@ serve(async (req) => {
             headers: DB_HEADERS,
             body: JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() }),
           });
+          // Send completion report email
+          await sendCampaignEmail(campaignId);
         }
       }
       
@@ -317,6 +422,18 @@ serve(async (req) => {
       headers: DB_HEADERS,
     });
     console.log('Reset beds_confirmed=0 and cleared old responses');
+
+    // Clean up any stuck "calling" items from previous runs (older than 2 minutes)
+    // These get stuck when Start Calls is clicked while calls are in-flight
+    await fetch(
+      `${SUPABASE_URL}/rest/v1/call_queue?campaign_id=eq.${campaignId}&status=eq.calling`,
+      {
+        method: 'PATCH',
+        headers: DB_HEADERS,
+        body: JSON.stringify({ status: 'failed', completed_at: new Date().toISOString() }),
+      }
+    );
+    console.log('Cleaned up any stuck calling items');
     
     // Get campaign info (for custom message URL)
     const campRes = await fetch(

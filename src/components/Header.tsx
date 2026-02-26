@@ -20,12 +20,10 @@ export default function Header() {
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-              MO
-            </div>
+            <img src="/logo.jpg" alt="Machnisei Orchim" className="w-10 h-10 rounded-full object-cover" />
             <div className="flex flex-col">
               <span className="font-bold text-gray-900">Machnisei Orchim</span>
-              <span className="text-xs text-gray-500">Guest House IVR</span>
+              <span className="text-xs text-gray-500">D'Shikun Skvira</span>
             </div>
           </Link>
 

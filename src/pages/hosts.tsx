@@ -191,11 +191,11 @@ export default function HostsPage() {
 
   return (
     <>
-      <Head><title>Hosts - Guest House IVR</title></Head>
+      <Head><title>Hosts - Machnisei Orchim</title></Head>
       <div style={styles.page}>
         <nav style={styles.nav}>
           <div style={styles.navInner}>
-            <Link href="/" style={styles.logo}><span style={{ fontSize: '28px' }}>🏠</span>Guest House IVR</Link>
+            <Link href="/" style={styles.logo}><img src="/logo.jpg" alt="Logo" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />Machnisei Orchim</Link>
             <div style={styles.navLinks}>
               {[{ href: '/dashboard', label: '📊 Dashboard' }, { href: '/hosts', label: '👥 Hosts' }, { href: '/campaigns', label: '📢 Campaigns' }, { href: '/recordings', label: '🎙️ Recordings' }].map(i => (
                 <Link key={i.href} href={i.href} style={styles.navLink(i.href === '/hosts')}>{i.label}</Link>
